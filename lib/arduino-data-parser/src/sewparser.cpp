@@ -1,11 +1,11 @@
 #include "sewparser.h"
 
 void printHex(const uint8_t* buffer, int size) {
-    Serial.print("[");
+    printf("\n[");
     for(int i = 0; i < size; i++) {
-        Serial.print(buffer[i]);
+        printf("%x", buffer[i]);
     };
-    Serial.println("]");
+    printf("]\n");
 }
 
 SewParser::SewParser() {

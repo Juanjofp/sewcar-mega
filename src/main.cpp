@@ -29,12 +29,12 @@ SewDistance distanceBack(trigPinBack, echoPinBack, MAX_DISTANCE);
 void distanceFrontCallback(int distance) {
   FRAME frame;
   SewParser::encodeDistance(frame, macDistanceFront, distance);
-  Serial.write(frame.frame, frame.size);
+  Serial1.write(frame.frame, frame.size);
 }
 void distanceBackCallback(int distance) {
   FRAME frame;
   SewParser::encodeDistance(frame, macDistanceBack, distance);
-  Serial.write(frame.frame, frame.size);
+  Serial1.write(frame.frame, frame.size);
 }
 
 SewMotors leftMotor(enableM1, forwardM1, reverseM1);
@@ -42,30 +42,6 @@ SewMotors rightMotor(enabledM2, forwardM2, reverseM2);
 
 SewParser sewParser;
 uint8_t sewParserBuffer[SEW_PARSER_MAX_BUFFER_SIZE];
-
-void syncESP32() {
-    uint8_t mac[6];
-    bool macReceived = false;
-    while(!macReceived) {
-        if(Serial.available()) {
-            size_t macSize = Serial.readBytes(mac, 6);
-            if(macSize == 6) {
-                macReceived = true;
-                for(int i = 0; i < 6; i++) {
-                    macMotorLeft[i] = mac[i];
-                    macMotorRight[i] = mac[i];
-                    macDistanceFront[i] = mac[i];
-                    macDistanceBack[i] = mac[i];
-                }
-            }
-        }
-        else {
-            Serial.write(waitingMAC, 3);
-            delay(500);
-        }
-    }
-}
-
 int handleFrames(FRAME frame, int status) {
     if(frame.type == DCMOTOR) {
         uint8_t data[3];
@@ -81,8 +57,31 @@ int handleFrames(FRAME frame, int status) {
     return 0;
 }
 
+void syncESP32() {
+    uint8_t mac[6];
+    bool macReceived = false;
+    while(!macReceived) {
+        if(Serial1.available()) {
+            size_t macSize = Serial1.readBytes(mac, 6);
+            if(macSize == 6) {
+                macReceived = true;
+                for(int i = 0; i < 6; i++) {
+                    macMotorLeft[i] = mac[i];
+                    macMotorRight[i] = mac[i];
+                    macDistanceFront[i] = mac[i];
+                    macDistanceBack[i] = mac[i];
+                }
+            }
+        }
+        else {
+            Serial1.write(waitingMAC, 3);
+            delay(500);
+        }
+    }
+}
+
 void setup() {
-    Serial.begin(115200);
+    Serial1.begin(115200);
 
     distanceFront.init();
     distanceFront.registerCallback(1000, distanceFrontCallback);
@@ -99,8 +98,8 @@ void setup() {
 
 void loop() {
     int byteReaded = 0;
-    while(Serial.available() > 0 && byteReaded < SEW_PARSER_MAX_BUFFER_SIZE) {
-        sewParserBuffer[byteReaded] = Serial.read();
+    while(Serial1.available() > 0 && byteReaded < SEW_PARSER_MAX_BUFFER_SIZE) {
+        sewParserBuffer[byteReaded] = Serial1.read();
         byteReaded++;
     }
     if(byteReaded > 0) {
