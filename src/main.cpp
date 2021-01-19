@@ -1,6 +1,7 @@
 #include <sewparser.h>
 #include "sewdistance.hpp"
 #include "sewmotors.hpp"
+#include "sewpir.hpp"
 
 #define SEW_PARSER_MAX_BUFFER_SIZE 120
 
@@ -9,6 +10,8 @@
 #define echoPinBack 5
 #define trigPinFront 7
 #define echoPinFront 6
+
+#define pirPin 3
 
 #define enableM1 8
 #define forwardM1 9
@@ -22,6 +25,7 @@ uint8_t macMotorLeft[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
 uint8_t macMotorRight[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
 uint8_t macDistanceFront[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03};
 uint8_t macDistanceBack[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04};
+uint8_t macPIR[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04};
 uint8_t waitingMAC[] = {0x53, 0x45, 0x57};
 
 SewDistance distanceFront(trigPinFront, echoPinFront, MAX_DISTANCE);
@@ -37,12 +41,22 @@ void distanceBackCallback(int distance) {
   Serial1.write(frame.frame, frame.size);
 }
 
+// PIR Sensors
+SewPIR sensorPIR(pirPin);
+void onPIRDetection(boolean isMotionDeteted) {
+    FRAME frame;
+    SewParser::encodeToggle(frame, macPIR, sensorPIR.isMotionDetected());
+    Serial1.write(frame.frame, frame.size);
+    Serial.println("Toggle sent!");
+}
+
 SewMotors leftMotor(enableM1, forwardM1, reverseM1);
 SewMotors rightMotor(enabledM2, forwardM2, reverseM2);
 
 SewParser sewParser;
 uint8_t sewParserBuffer[SEW_PARSER_MAX_BUFFER_SIZE];
 int handleFrames(FRAME frame, int status) {
+
     if(frame.type == DCMOTOR) {
         uint8_t data[3];
         decodeDCMotorPayload(frame, data);
@@ -63,8 +77,11 @@ void syncESP32() {
     while(!macReceived) {
         if(Serial1.available()) {
             size_t macSize = Serial1.readBytes(mac, 6);
+            Serial.println("ESP Sync received");
+            Serial.write(mac, macSize);
             if(macSize == 6) {
                 macReceived = true;
+                Serial.println("ESP Synced OK");
                 for(int i = 0; i < 6; i++) {
                     macMotorLeft[i] = mac[i];
                     macMotorRight[i] = mac[i];
@@ -75,6 +92,7 @@ void syncESP32() {
         }
         else {
             Serial1.write(waitingMAC, 3);
+            Serial.println("Waiting MAC");
             delay(500);
         }
     }
@@ -82,12 +100,16 @@ void syncESP32() {
 
 void setup() {
     Serial1.begin(115200);
+    Serial.begin(115200);
 
     distanceFront.init();
     distanceFront.registerCallback(1000, distanceFrontCallback);
 
     distanceBack.init();
     distanceBack.registerCallback(1000, distanceBackCallback);
+
+    sensorPIR.init();
+    sensorPIR.registerCallback(onPIRDetection);
 
     leftMotor.init();
     rightMotor.init();
@@ -103,9 +125,13 @@ void loop() {
         byteReaded++;
     }
     if(byteReaded > 0) {
+        Serial.print("Buffer: ");
+        Serial.write(sewParserBuffer, byteReaded);
+        Serial.println();
         sewParser.decodeFrameWithCallback(sewParserBuffer, byteReaded, handleFrames);
     }
     // Manage distanceFront
     distanceFront.handleDistances();
     distanceBack.handleDistances();
-    }
+    sensorPIR.handlePIR();
+}
